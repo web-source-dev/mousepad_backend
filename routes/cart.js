@@ -203,13 +203,12 @@ router.get('/summary/:userEmail', validateUserEmail, async (req, res) => {
   }
 });
 
-// PATCH /api/cart/:cartId/payment - Update payment status
 router.patch('/payment', [
   body('email').isEmail().withMessage('Valid email is required'),
-    body('status').isIn(['pending', 'paymentFailed', 'paymentSuccess','cancelled']).withMessage('Valid payment status is required')
+  body('status').isIn(['pending', 'paymentFailed', 'paymentSuccess', 'cancelled']).withMessage('Valid payment status is required'),
+  body('itemIds').isArray({ min: 1 }).withMessage('itemIds must be a non-empty array')
 ], async (req, res) => {
   try {
-    // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -219,33 +218,24 @@ router.patch('/payment', [
       });
     }
 
-    const { email, status } = req.body;
+    const { email, status, itemIds } = req.body;
 
-    // Find cart and verify email matches
-    const cart = await CartItem.findOne({ 
-      userEmail: email 
-    });
+    // Find matching cart items by email and ID
+    const updated = await CartItem.updateMany(
+      { userEmail: email, id: { $in: itemIds } },
+      { $set: { status: status, updatedAt: new Date() } }
+    );
 
-    if (!cart) {
+    if (updated.modifiedCount === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Cart not found or email does not match'
+        message: 'No cart items found or updated'
       });
     }
 
-    // Update payment status
-    cart.status = status;
-    cart.updatedAt = new Date();
-    await cart.save();
-
-    res.json({
+    return res.json({
       success: true,
-      message: 'Payment status updated successfully',
-      data: {
-        cartId: cart.id,
-        status: cart.status,
-        updatedAt: cart.updatedAt
-      }
+      message: `Payment status updated for ${updated.modifiedCount} items.`,
     });
 
   } catch (error) {
