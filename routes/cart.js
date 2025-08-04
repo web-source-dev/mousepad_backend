@@ -3,8 +3,7 @@ const router = express.Router();
 const CartItem = require('../models/CartItem');
 const { validateCartItem, validateUserEmail } = require('../middleware/validate');
 const { body, validationResult } = require('express-validator');
-const { processImage } = require('../utils/imageConverter');
-const imageConfig = require('../config/imageProcessing');
+const { processImage, deleteImage, imageConfig } = require('../utils/imageProcessor');
 
 // @desc    Get user's cart items
 // @route   GET /api/cart/:userEmail
@@ -322,6 +321,33 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
+    // Clean up images from Cloudinary
+    try {
+      if (deletedItem.image) {
+        await deleteImage(deletedItem.image);
+      }
+      if (deletedItem.finalImage) {
+        await deleteImage(deletedItem.finalImage);
+      }
+      if (deletedItem.configuration?.imageSettings?.uploadedImage) {
+        await deleteImage(deletedItem.configuration.imageSettings.uploadedImage);
+      }
+      if (deletedItem.configuration?.imageSettings?.editedImage) {
+        await deleteImage(deletedItem.configuration.imageSettings.editedImage);
+      }
+      if (deletedItem.configuration?.imageSettings?.originalImage) {
+        await deleteImage(deletedItem.configuration.imageSettings.originalImage);
+      }
+      if (deletedItem.configuration?.uploadedImages && Array.isArray(deletedItem.configuration.uploadedImages)) {
+        for (const imageUrl of deletedItem.configuration.uploadedImages) {
+          await deleteImage(imageUrl);
+        }
+      }
+    } catch (cleanupError) {
+      console.error('Error cleaning up images:', cleanupError);
+      // Don't fail the request if cleanup fails
+    }
+
     res.status(200).json({
       success: true,
       message: 'Item removed from cart successfully',
@@ -343,7 +369,39 @@ router.delete('/clear/:userEmail', validateUserEmail, async (req, res) => {
   try {
     const { userEmail } = req.params;
     
+    // Get cart items before clearing to clean up images
+    const cartItems = await CartItem.getUserCart(userEmail);
+    
     const result = await CartItem.clearUserCart(userEmail);
+
+    // Clean up images from Cloudinary
+    try {
+      for (const item of cartItems) {
+        if (item.image) {
+          await deleteImage(item.image);
+        }
+        if (item.finalImage) {
+          await deleteImage(item.finalImage);
+        }
+        if (item.configuration?.imageSettings?.uploadedImage) {
+          await deleteImage(item.configuration.imageSettings.uploadedImage);
+        }
+        if (item.configuration?.imageSettings?.editedImage) {
+          await deleteImage(item.configuration.imageSettings.editedImage);
+        }
+        if (item.configuration?.imageSettings?.originalImage) {
+          await deleteImage(item.configuration.imageSettings.originalImage);
+        }
+        if (item.configuration?.uploadedImages && Array.isArray(item.configuration.uploadedImages)) {
+          for (const imageUrl of item.configuration.uploadedImages) {
+            await deleteImage(imageUrl);
+          }
+        }
+      }
+    } catch (cleanupError) {
+      console.error('Error cleaning up images:', cleanupError);
+      // Don't fail the request if cleanup fails
+    }
 
     res.status(200).json({
       success: true,
