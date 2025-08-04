@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const CartItem = require('../models/CartItem');
 const { validateCartItem, validateUserEmail } = require('../middleware/validate');
+const { body, validationResult } = require('express-validator');
 
 // @desc    Get user's cart items
 // @route   GET /api/cart/:userEmail
