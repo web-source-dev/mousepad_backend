@@ -175,6 +175,12 @@ const cartItemSchema = new mongoose.Schema({
     appliedOverlays: [String],
     logoFile: String,
     uploadedImages: [String]
+  }, 
+
+  status: {
+    type: String,
+    enum: ['pending', 'paymentFailed', 'paymentSuccess', 'cancelled'],
+    default: 'pending'
   },
 
   // Timestamps

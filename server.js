@@ -25,7 +25,7 @@ app.use(helmet());
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000' || 'https://evogear.rtnglobal.co',
+  origin: process.env.CORS_ORIGIN || 'http://localhost:3000' || 'https://evogear.rtnglobal.co' || "https://www.evogearstudio.com/cart-page?rc=test-site" || "https://www.evogearstudio.com",
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']

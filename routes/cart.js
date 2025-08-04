@@ -202,4 +202,59 @@ router.get('/summary/:userEmail', validateUserEmail, async (req, res) => {
   }
 });
 
+// PATCH /api/cart/:cartId/payment - Update payment status
+router.patch('/payment', [
+  body('email').isEmail().withMessage('Valid email is required'),
+    body('status').isIn(['pending', 'paymentFailed', 'paymentSuccess','cancelled']).withMessage('Valid payment status is required')
+], async (req, res) => {
+  try {
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { email, status } = req.body;
+
+    // Find cart and verify email matches
+    const cart = await CartItem.findOne({ 
+      userEmail: email 
+    });
+
+    if (!cart) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cart not found or email does not match'
+      });
+    }
+
+    // Update payment status
+    cart.status = status;
+    cart.updatedAt = new Date();
+    await cart.save();
+
+    res.json({
+      success: true,
+      message: 'Payment status updated successfully',
+      data: {
+        cartId: cart.id,
+        status: cart.status,
+        updatedAt: cart.updatedAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Error updating payment status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
+    });
+  }
+});
+
 module.exports = router; 
