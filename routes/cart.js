@@ -266,7 +266,7 @@ router.put('/:id', async (req, res) => {
         if (!imageConfig.fallback.useOriginal) {
           throw imageError;
         }
-      }
+      } 
     }
     
     // Process configuration images if they exist in updates
