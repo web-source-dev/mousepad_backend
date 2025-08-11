@@ -17,19 +17,15 @@ const imageConfig = {
       transformation: {
         quality: 'auto',
         fetch_format: 'auto',
-        width: 800,
-        height: 600,
-        crop: 'fill'
+        crop: 'fit',
+        background: 'white'
       }
     },
     final: {
       folder: 'mousepad/final',
       transformation: {
         quality: 'auto',
-        fetch_format: 'auto',
-        width: 1200,
-        height: 800,
-        crop: 'fill'
+        fetch_format: 'auto'
       }
     },
     configuration: {
@@ -37,9 +33,8 @@ const imageConfig = {
       transformation: {
         quality: 'auto',
         fetch_format: 'auto',
-        width: 600,
-        height: 400,
-        crop: 'fill'
+        crop: 'fit',
+        background: 'white'
       }
     }
   },
@@ -55,7 +50,7 @@ const imageConfig = {
  * @param {Object} imageType - Image type configuration
  * @returns {Promise<string>} - Cloudinary URL
  */
-async function processImage(base64Image, imageType) {
+async function processImage(base64Image, imageType, customTransformation) {
   try {
     // Check if the image is already a URL (not base64)
     if (base64Image.startsWith('http')) {
@@ -69,15 +64,13 @@ async function processImage(base64Image, imageType) {
     }
 
     // Upload to Cloudinary
-    const uploadResult = await cloudinary.uploader.upload(
-      `data:image/jpeg;base64,${imageData}`,
+    const uploadResult = await cloudinary.uploader.upload(`data:image/jpeg;base64,${imageData}`,
       {
         folder: imageType.folder,
-        transformation: imageType.transformation,
+        transformation: customTransformation || imageType.transformation,
         resource_type: 'image',
         format: 'jpg'
-      }
-    );
+      });
 
     console.log(`Image uploaded to Cloudinary: ${uploadResult.secure_url}`);
     return uploadResult.secure_url;

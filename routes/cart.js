@@ -51,10 +51,40 @@ router.post('/', validateCartItem, async (req, res) => {
       }
     }
     
-    // Process final image if it exists
+    // Process final image if it exists. If size is provided, enforce exact dimensions with white padding
     if (processedData.finalImage && imageConfig.enabled) {
       try {
-        processedData.finalImage = await processImage(processedData.finalImage, imageConfig.imageTypes.final);
+        let customTransformation = undefined;
+        const sizeKey = processedData?.specs?.size || processedData?.configuration?.mousepadSize;
+        if (sizeKey && typeof sizeKey === 'string') {
+          const sizeMap = {
+            '200x240': { w: 240, h: 200 },
+            '300x350': { w: 350, h: 300 },
+            '300x600': { w: 600, h: 300 },
+            '300x700': { w: 700, h: 300 },
+            '300x800': { w: 800, h: 300 },
+            '350x600': { w: 600, h: 350 },
+            '400x600': { w: 600, h: 400 },
+            '400x700': { w: 700, h: 400 },
+            '400x800': { w: 800, h: 400 },
+            '400x900': { w: 900, h: 400 },
+            '500x800': { w: 800, h: 500 },
+            '500x1000': { w: 1000, h: 500 }
+          };
+          const target = sizeMap[sizeKey];
+          if (target) {
+            // Multiply by 4 to get decent export resolution; Cloudinary will add white padding around content
+            customTransformation = {
+              width: target.w * 4,
+              height: target.h * 4,
+              crop: 'pad',
+              background: 'white',
+              quality: 'auto',
+              fetch_format: 'auto'
+            };
+          }
+        }
+        processedData.finalImage = await processImage(processedData.finalImage, imageConfig.imageTypes.final, customTransformation);
         console.log('Final image processed successfully');
       } catch (imageError) {
         console.error('Error processing final image:', imageError);
@@ -197,10 +227,39 @@ router.put('/:id', async (req, res) => {
       }
     }
     
-    // Process final image if it exists in updates
+    // Process final image if it exists in updates (respecting size -> padded white background)
     if (processedUpdates.finalImage && imageConfig.enabled) {
       try {
-        processedUpdates.finalImage = await processImage(processedUpdates.finalImage, imageConfig.imageTypes.final);
+        let customTransformation = undefined;
+        const sizeKey = processedUpdates?.specs?.size || processedUpdates?.configuration?.mousepadSize;
+        if (sizeKey && typeof sizeKey === 'string') {
+          const sizeMap = {
+            '200x240': { w: 240, h: 200 },
+            '300x350': { w: 350, h: 300 },
+            '300x600': { w: 600, h: 300 },
+            '300x700': { w: 700, h: 300 },
+            '300x800': { w: 800, h: 300 },
+            '350x600': { w: 600, h: 350 },
+            '400x600': { w: 600, h: 400 },
+            '400x700': { w: 700, h: 400 },
+            '400x800': { w: 800, h: 400 },
+            '400x900': { w: 900, h: 400 },
+            '500x800': { w: 800, h: 500 },
+            '500x1000': { w: 1000, h: 500 }
+          };
+          const target = sizeMap[sizeKey];
+          if (target) {
+            customTransformation = {
+              width: target.w * 4,
+              height: target.h * 4,
+              crop: 'pad',
+              background: 'white',
+              quality: 'auto',
+              fetch_format: 'auto'
+            };
+          }
+        }
+        processedUpdates.finalImage = await processImage(processedUpdates.finalImage, imageConfig.imageTypes.final, customTransformation);
         console.log('Updated final image processed successfully');
       } catch (imageError) {
         console.error('Error processing updated final image:', imageError);
