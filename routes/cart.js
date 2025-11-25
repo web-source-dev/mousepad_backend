@@ -3,7 +3,60 @@ const router = express.Router();
 const CartItem = require('../models/CartItem');
 const { validateCartItem, validateUserEmail } = require('../middleware/validate');
 const { body, validationResult } = require('express-validator');
-const { processImage, deleteImage, imageConfig } = require('../utils/imageProcessor');
+const { deleteImage } = require('../utils/imageProcessor');
+
+const clonePayload = (payload) => JSON.parse(JSON.stringify(payload));
+
+const ensureHostedImage = (value, field, allowMissing) => {
+  if (!value) {
+    if (allowMissing) {
+      return value;
+    }
+    throw new Error(`${field} is required`);
+  }
+
+  if (typeof value !== 'string') {
+    throw new Error(`${field} must be a string URL`);
+  }
+
+  if (value.startsWith('data:')) {
+    throw new Error(`${field} must be uploaded before saving`);
+  }
+
+  return value;
+};
+
+const sanitizeCartPayload = (payload, { partial = false } = {}) => {
+  const sanitized = clonePayload(payload);
+
+  sanitized.image = sanitized.image
+    ? ensureHostedImage(sanitized.image, 'image', partial)
+    : sanitized.image;
+  sanitized.finalImage = sanitized.finalImage
+    ? ensureHostedImage(sanitized.finalImage, 'finalImage', partial)
+    : sanitized.finalImage;
+  sanitized.originalImageUrl = sanitized.originalImageUrl
+    ? ensureHostedImage(sanitized.originalImageUrl, 'originalImageUrl', partial)
+    : sanitized.originalImageUrl;
+
+  if (!partial) {
+    sanitized.image = ensureHostedImage(sanitized.image, 'image');
+    sanitized.finalImage = ensureHostedImage(sanitized.finalImage, 'finalImage');
+    sanitized.originalImageUrl = ensureHostedImage(sanitized.originalImageUrl, 'originalImageUrl');
+  }
+
+  if (sanitized.configuration?.imageSettings) {
+    const { zoom, position, adjustments, filter, crop } = sanitized.configuration.imageSettings;
+    sanitized.configuration.imageSettings = { zoom, position, adjustments, filter, crop };
+  }
+
+  if (sanitized.configuration) {
+    delete sanitized.configuration.uploadedImages;
+    delete sanitized.configuration.logoFile;
+  }
+
+  return sanitized;
+};
 
 // @desc    Get user's cart items
 // @route   GET /api/cart/:userEmail
@@ -33,129 +86,14 @@ router.get('/:userEmail', validateUserEmail, async (req, res) => {
 // @access  Public
 router.post('/', validateCartItem, async (req, res) => {
   try {
-    const cartItemData = req.body;
-    
-    // Process images before saving to database
-    const processedData = { ...cartItemData };
-    
-    // Process main image if it exists
-    if (processedData.image && imageConfig.enabled) {
-      try {
-        processedData.image = await processImage(processedData.image, imageConfig.imageTypes.main);
-        console.log('Main image processed successfully');
-      } catch (imageError) {
-        console.error('Error processing main image:', imageError);
-        if (!imageConfig.fallback.useOriginal) {
-          throw imageError;
-        }
-      }
-    }
-    
-    // Process final image if it exists. If size is provided, enforce exact dimensions with white padding
-    if (processedData.finalImage && imageConfig.enabled) {
-      try {
-        let customTransformation = undefined;
-        const sizeKey = processedData?.specs?.size || processedData?.configuration?.mousepadSize;
-        if (sizeKey && typeof sizeKey === 'string') {
-          const sizeMap = {
-            '200x240': { w: 240, h: 200 },
-            '300x350': { w: 350, h: 300 },
-            '300x600': { w: 600, h: 300 },
-            '300x700': { w: 700, h: 300 },
-            '300x800': { w: 800, h: 300 },
-            '350x600': { w: 600, h: 350 },
-            '400x600': { w: 600, h: 400 },
-            '400x700': { w: 700, h: 400 },
-            '400x800': { w: 800, h: 400 },
-            '400x900': { w: 900, h: 400 },
-            '500x800': { w: 800, h: 500 },
-            '500x1000': { w: 1000, h: 500 }
-          };
-          const target = sizeMap[sizeKey];
-          if (target) {
-            // Multiply by 4 to get decent export resolution; Cloudinary will add white padding around content
-            customTransformation = {
-              width: target.w * 4,
-              height: target.h * 4,
-              crop: 'pad',
-              background: 'white',
-              quality: 'auto',
-              fetch_format: 'auto'
-            };
-          }
-        }
-        processedData.finalImage = await processImage(processedData.finalImage, imageConfig.imageTypes.final, customTransformation);
-        console.log('Final image processed successfully');
-      } catch (imageError) {
-        console.error('Error processing final image:', imageError);
-        if (!imageConfig.fallback.useOriginal) {
-          throw imageError;
-        }
-      }
-    }
-    
-    // Process configuration images if they exist
-    if (processedData.configuration?.imageSettings?.uploadedImage && imageConfig.enabled) {
-      try {
-        processedData.configuration.imageSettings.uploadedImage = await processImage(
-          processedData.configuration.imageSettings.uploadedImage,
-          imageConfig.imageTypes.configuration
-        );
-        console.log('Configuration uploaded image processed successfully');
-      } catch (imageError) {
-        console.error('Error processing configuration uploaded image:', imageError);
-        if (!imageConfig.fallback.continueOnError) {
-          throw imageError;
-        }
-      }
-    }
-    
-    if (processedData.configuration?.imageSettings?.editedImage && imageConfig.enabled) {
-      try {
-        processedData.configuration.imageSettings.editedImage = await processImage(
-          processedData.configuration.imageSettings.editedImage,
-          imageConfig.imageTypes.final
-        );
-        console.log('Configuration edited image processed successfully');
-      } catch (imageError) {
-        console.error('Error processing configuration edited image:', imageError);
-        if (!imageConfig.fallback.continueOnError) {
-          throw imageError;
-        }
-      }
-    }
-    
-    if (processedData.configuration?.imageSettings?.originalImage && imageConfig.enabled) {
-      try {
-        processedData.configuration.imageSettings.originalImage = await processImage(
-          processedData.configuration.imageSettings.originalImage,
-          imageConfig.imageTypes.configuration
-        );
-        console.log('Configuration original image processed successfully');
-      } catch (imageError) {
-        console.error('Error processing configuration original image:', imageError);
-        if (!imageConfig.fallback.continueOnError) {
-          throw imageError;
-        }
-      }
-    }
-    
-    // Process uploaded images array if it exists
-    if (processedData.configuration?.uploadedImages && Array.isArray(processedData.configuration.uploadedImages) && imageConfig.enabled) {
-      for (let i = 0; i < processedData.configuration.uploadedImages.length; i++) {
-        try {
-          processedData.configuration.uploadedImages[i] = await processImage(
-            processedData.configuration.uploadedImages[i],
-            imageConfig.imageTypes.configuration
-          );
-        } catch (imageError) {
-          console.error(`Error processing uploaded image ${i}:`, imageError);
-          if (!imageConfig.fallback.continueOnError) {
-            throw imageError;
-          }
-        }
-      }
-      console.log('Uploaded images array processed successfully');
+    let processedData;
+    try {
+      processedData = sanitizeCartPayload(req.body);
+    } catch (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: validationError.message
+      });
     }
     
     // Check if item with same ID already exists for this user
@@ -211,126 +149,14 @@ router.put('/:id', async (req, res) => {
       });
     }
 
-    // Process images in updates before saving
-    const processedUpdates = { ...updates };
-    
-    // Process main image if it exists in updates
-    if (processedUpdates.image && imageConfig.enabled) {
-      try {
-        processedUpdates.image = await processImage(processedUpdates.image, imageConfig.imageTypes.main);
-        console.log('Updated main image processed successfully');
-      } catch (imageError) {
-        console.error('Error processing updated main image:', imageError);
-        if (!imageConfig.fallback.useOriginal) {
-          throw imageError;
-        }
-      }
-    }
-    
-    // Process final image if it exists in updates (respecting size -> padded white background)
-    if (processedUpdates.finalImage && imageConfig.enabled) {
-      try {
-        let customTransformation = undefined;
-        const sizeKey = processedUpdates?.specs?.size || processedUpdates?.configuration?.mousepadSize;
-        if (sizeKey && typeof sizeKey === 'string') {
-          const sizeMap = {
-            '200x240': { w: 240, h: 200 },
-            '300x350': { w: 350, h: 300 },
-            '300x600': { w: 600, h: 300 },
-            '300x700': { w: 700, h: 300 },
-            '300x800': { w: 800, h: 300 },
-            '350x600': { w: 600, h: 350 },
-            '400x600': { w: 600, h: 400 },
-            '400x700': { w: 700, h: 400 },
-            '400x800': { w: 800, h: 400 },
-            '400x900': { w: 900, h: 400 },
-            '500x800': { w: 800, h: 500 },
-            '500x1000': { w: 1000, h: 500 }
-          };
-          const target = sizeMap[sizeKey];
-          if (target) {
-            customTransformation = {
-              width: target.w * 4,
-              height: target.h * 4,
-              crop: 'pad',
-              background: 'white',
-              quality: 'auto',
-              fetch_format: 'auto'
-            };
-          }
-        }
-        processedUpdates.finalImage = await processImage(processedUpdates.finalImage, imageConfig.imageTypes.final, customTransformation);
-        console.log('Updated final image processed successfully');
-      } catch (imageError) {
-        console.error('Error processing updated final image:', imageError);
-        if (!imageConfig.fallback.useOriginal) {
-          throw imageError;
-        }
-      } 
-    }
-    
-    // Process configuration images if they exist in updates
-    if (processedUpdates.configuration?.imageSettings?.uploadedImage && imageConfig.enabled) {
-      try {
-        processedUpdates.configuration.imageSettings.uploadedImage = await processImage(
-          processedUpdates.configuration.imageSettings.uploadedImage,
-          imageConfig.imageTypes.configuration
-        );
-        console.log('Updated configuration uploaded image processed successfully');
-      } catch (imageError) {
-        console.error('Error processing updated configuration uploaded image:', imageError);
-        if (!imageConfig.fallback.continueOnError) {
-          throw imageError;
-        }
-      }
-    }
-    
-    if (processedUpdates.configuration?.imageSettings?.editedImage && imageConfig.enabled) {
-      try {
-        processedUpdates.configuration.imageSettings.editedImage = await processImage(
-          processedUpdates.configuration.imageSettings.editedImage,
-          imageConfig.imageTypes.final
-        );
-        console.log('Updated configuration edited image processed successfully');
-      } catch (imageError) {
-        console.error('Error processing updated configuration edited image:', imageError);
-        if (!imageConfig.fallback.continueOnError) {
-          throw imageError;
-        }
-      }
-    }
-    
-    if (processedUpdates.configuration?.imageSettings?.originalImage && imageConfig.enabled) {
-      try {
-        processedUpdates.configuration.imageSettings.originalImage = await processImage(
-          processedUpdates.configuration.imageSettings.originalImage,
-          imageConfig.imageTypes.configuration
-        );
-        console.log('Updated configuration original image processed successfully');
-      } catch (imageError) {
-        console.error('Error processing updated configuration original image:', imageError);
-        if (!imageConfig.fallback.continueOnError) {
-          throw imageError;
-        }
-      }
-    }
-    
-    // Process uploaded images array if it exists in updates
-    if (processedUpdates.configuration?.uploadedImages && Array.isArray(processedUpdates.configuration.uploadedImages) && imageConfig.enabled) {
-      for (let i = 0; i < processedUpdates.configuration.uploadedImages.length; i++) {
-        try {
-          processedUpdates.configuration.uploadedImages[i] = await processImage(
-            processedUpdates.configuration.uploadedImages[i],
-            imageConfig.imageTypes.configuration
-          );
-        } catch (imageError) {
-          console.error(`Error processing updated uploaded image ${i}:`, imageError);
-          if (!imageConfig.fallback.continueOnError) {
-            throw imageError;
-          }
-        }
-      }
-      console.log('Updated uploaded images array processed successfully');
+    let processedUpdates;
+    try {
+      processedUpdates = sanitizeCartPayload(updates, { partial: true });
+    } catch (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: validationError.message
+      });
     }
 
     const updatedItem = await CartItem.updateCartItem(id, userEmail, processedUpdates);
@@ -380,27 +206,13 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
-    // Clean up images from Cloudinary
+    // Clean up stored images (final + original)
     try {
-      if (deletedItem.image) {
-        await deleteImage(deletedItem.image);
-      }
       if (deletedItem.finalImage) {
         await deleteImage(deletedItem.finalImage);
       }
-      if (deletedItem.configuration?.imageSettings?.uploadedImage) {
-        await deleteImage(deletedItem.configuration.imageSettings.uploadedImage);
-      }
-      if (deletedItem.configuration?.imageSettings?.editedImage) {
-        await deleteImage(deletedItem.configuration.imageSettings.editedImage);
-      }
-      if (deletedItem.configuration?.imageSettings?.originalImage) {
-        await deleteImage(deletedItem.configuration.imageSettings.originalImage);
-      }
-      if (deletedItem.configuration?.uploadedImages && Array.isArray(deletedItem.configuration.uploadedImages)) {
-        for (const imageUrl of deletedItem.configuration.uploadedImages) {
-          await deleteImage(imageUrl);
-        }
+      if (deletedItem.originalImageUrl) {
+        await deleteImage(deletedItem.originalImageUrl);
       }
     } catch (cleanupError) {
       console.error('Error cleaning up images:', cleanupError);
@@ -436,25 +248,11 @@ router.delete('/clear/:userEmail', validateUserEmail, async (req, res) => {
     // Clean up images from Cloudinary
     try {
       for (const item of cartItems) {
-        if (item.image) {
-          await deleteImage(item.image);
-        }
         if (item.finalImage) {
           await deleteImage(item.finalImage);
         }
-        if (item.configuration?.imageSettings?.uploadedImage) {
-          await deleteImage(item.configuration.imageSettings.uploadedImage);
-        }
-        if (item.configuration?.imageSettings?.editedImage) {
-          await deleteImage(item.configuration.imageSettings.editedImage);
-        }
-        if (item.configuration?.imageSettings?.originalImage) {
-          await deleteImage(item.configuration.imageSettings.originalImage);
-        }
-        if (item.configuration?.uploadedImages && Array.isArray(item.configuration.uploadedImages)) {
-          for (const imageUrl of item.configuration.uploadedImages) {
-            await deleteImage(imageUrl);
-          }
+        if (item.originalImageUrl) {
+          await deleteImage(item.originalImageUrl);
         }
       }
     } catch (cleanupError) {
