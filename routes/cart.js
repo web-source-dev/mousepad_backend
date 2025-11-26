@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const CartItem = require('../models/CartItem');
-const { validateCartItem, validateUserEmail } = require('../middleware/validate');
 const { body, validationResult } = require('express-validator');
 const { deleteImage } = require('../utils/imageProcessor');
 
@@ -61,7 +60,7 @@ const sanitizeCartPayload = (payload, { partial = false } = {}) => {
 // @desc    Get user's cart items
 // @route   GET /api/cart/:userEmail
 // @access  Public
-router.get('/:userEmail', validateUserEmail, async (req, res) => {
+router.get('/:userEmail', async (req, res) => {
   try {
     const { userEmail } = req.params;
     
@@ -84,7 +83,7 @@ router.get('/:userEmail', validateUserEmail, async (req, res) => {
 // @desc    Add item to cart
 // @route   POST /api/cart
 // @access  Public
-router.post('/', validateCartItem, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     let processedData;
     try {
@@ -236,7 +235,7 @@ router.delete('/:id', async (req, res) => {
 // @desc    Clear user's cart
 // @route   DELETE /api/cart/clear/:userEmail
 // @access  Public
-router.delete('/clear/:userEmail', validateUserEmail, async (req, res) => {
+router.delete('/clear/:userEmail', async (req, res) => {
   try {
     const { userEmail } = req.params;
     
@@ -277,7 +276,7 @@ router.delete('/clear/:userEmail', validateUserEmail, async (req, res) => {
 // @desc    Get cart summary (count and total price)
 // @route   GET /api/cart/summary/:userEmail
 // @access  Public
-router.get('/summary/:userEmail', validateUserEmail, async (req, res) => {
+router.get('/summary/:userEmail', async (req, res) => {
   try {
     const { userEmail } = req.params;
     
