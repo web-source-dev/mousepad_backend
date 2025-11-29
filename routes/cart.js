@@ -4,57 +4,54 @@ const CartItem = require('../models/CartItem');
 const { body, validationResult } = require('express-validator');
 const { deleteImage } = require('../utils/imageProcessor');
 
-const clonePayload = (payload) => JSON.parse(JSON.stringify(payload));
-
-const ensureHostedImage = (value, field, allowMissing) => {
+// Validate image URL (must be hosted, not base64)
+const validateImageUrl = (value, field, allowMissing) => {
   if (!value) {
-    if (allowMissing) {
-      return value;
-    }
+    if (allowMissing) return value;
     throw new Error(`${field} is required`);
   }
-
   if (typeof value !== 'string') {
     throw new Error(`${field} must be a string URL`);
   }
-
   if (value.startsWith('data:')) {
     throw new Error(`${field} must be uploaded before saving`);
   }
-
   return value;
 };
 
+// Extract only essential fields for database storage
 const sanitizeCartPayload = (payload, { partial = false } = {}) => {
-  const sanitized = clonePayload(payload);
+  const essentialFields = {
+    userEmail: payload.userEmail,
+    id: payload.id,
+    name: payload.name || 'Custom Mousepad',
+    quantity: payload.quantity || 1,
+    price: payload.price,
+    currency: payload.currency || 'USD',
+    mousepadType: payload.mousepadType || payload.specs?.type || payload.configuration?.mousepadType || 'normal',
+    mousepadSize: payload.mousepadSize || payload.specs?.size || payload.configuration?.mousepadSize || '',
+    thickness: payload.thickness || payload.specs?.thickness || payload.configuration?.thickness || '',
+    status: payload.status || 'pending'
+  };
 
-  sanitized.image = sanitized.image
-    ? ensureHostedImage(sanitized.image, 'image', partial)
-    : sanitized.image;
-  sanitized.finalImage = sanitized.finalImage
-    ? ensureHostedImage(sanitized.finalImage, 'finalImage', partial)
-    : sanitized.finalImage;
-  sanitized.originalImageUrl = sanitized.originalImageUrl
-    ? ensureHostedImage(sanitized.originalImageUrl, 'originalImageUrl', partial)
-    : sanitized.originalImageUrl;
+  // Validate and sanitize image URLs
+  const finalImage = payload.finalImage || payload.image;
+  if (finalImage) {
+    essentialFields.finalImage = validateImageUrl(finalImage, 'finalImage', partial);
+  }
+  if (payload.originalImageUrl) {
+    essentialFields.originalImageUrl = validateImageUrl(payload.originalImageUrl, 'originalImageUrl', partial);
+  }
 
+  // Validate required fields for new items
   if (!partial) {
-    sanitized.image = ensureHostedImage(sanitized.image, 'image');
-    sanitized.finalImage = ensureHostedImage(sanitized.finalImage, 'finalImage');
-    sanitized.originalImageUrl = ensureHostedImage(sanitized.originalImageUrl, 'originalImageUrl');
+    if (!essentialFields.finalImage) throw new Error('finalImage is required');
+    if (!essentialFields.originalImageUrl) throw new Error('originalImageUrl is required');
+    if (!essentialFields.mousepadSize) throw new Error('mousepadSize is required');
+    if (!essentialFields.thickness) throw new Error('thickness is required');
   }
 
-  if (sanitized.configuration?.imageSettings) {
-    const { zoom, position, adjustments, filter, crop } = sanitized.configuration.imageSettings;
-    sanitized.configuration.imageSettings = { zoom, position, adjustments, filter, crop };
-  }
-
-  if (sanitized.configuration) {
-    delete sanitized.configuration.uploadedImages;
-    delete sanitized.configuration.logoFile;
-  }
-
-  return sanitized;
+  return essentialFields;
 };
 
 // @desc    Get user's cart items
@@ -75,7 +72,9 @@ router.get('/:userEmail', async (req, res) => {
     console.error('Error fetching cart items:', error);
     res.status(500).json({
       success: false,
-      error: 'Server error while fetching cart items'
+      error: process.env.NODE_ENV === 'production' 
+        ? 'Server error while fetching cart items' 
+        : error.message
     });
   }
 });
@@ -128,7 +127,9 @@ router.post('/', async (req, res) => {
     console.error('Error adding item to cart:', error);
     res.status(500).json({
       success: false,
-      error: 'Server error while adding item to cart'
+      error: process.env.NODE_ENV === 'production' 
+        ? 'Server error while adding item to cart' 
+        : error.message
     });
   }
 });
@@ -176,7 +177,9 @@ router.put('/:id', async (req, res) => {
     console.error('Error updating cart item:', error);
     res.status(500).json({
       success: false,
-      error: 'Server error while updating cart item'
+      error: process.env.NODE_ENV === 'production' 
+        ? 'Server error while updating cart item' 
+        : error.message
     });
   }
 });
@@ -227,7 +230,9 @@ router.delete('/:id', async (req, res) => {
     console.error('Error removing item from cart:', error);
     res.status(500).json({
       success: false,
-      error: 'Server error while removing item from cart'
+      error: process.env.NODE_ENV === 'production' 
+        ? 'Server error while removing item from cart' 
+        : error.message
     });
   }
 });
@@ -268,7 +273,9 @@ router.delete('/clear/:userEmail', async (req, res) => {
     console.error('Error clearing cart:', error);
     res.status(500).json({
       success: false,
-      error: 'Server error while clearing cart'
+      error: process.env.NODE_ENV === 'production' 
+        ? 'Server error while clearing cart' 
+        : error.message
     });
   }
 });
@@ -300,7 +307,9 @@ router.get('/summary/:userEmail', async (req, res) => {
     console.error('Error fetching cart summary:', error);
     res.status(500).json({
       success: false,
-      error: 'Server error while fetching cart summary'
+      error: process.env.NODE_ENV === 'production' 
+        ? 'Server error while fetching cart summary' 
+        : error.message
     });
   }
 });
@@ -366,7 +375,9 @@ router.get('/admin/all', async (req, res) => {
     console.error('Error fetching all cart items:', error);
     res.status(500).json({
       success: false,
-      error: 'Server error while fetching all cart items'
+      error: process.env.NODE_ENV === 'production' 
+        ? 'Server error while fetching all cart items' 
+        : error.message
     });
   }
 });

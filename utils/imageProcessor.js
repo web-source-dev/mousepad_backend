@@ -1,90 +1,23 @@
 const cloudinary = require('cloudinary').v2;
-require('dotenv').config();
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
+// Only load dotenv in development
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
 
-// Image configuration
-const imageConfig = {
-  enabled: true,
-  imageTypes: {
-    main: {
-      folder: 'mousepad/main',
-      transformation: {
-        quality: 'auto',
-        fetch_format: 'auto',
-        crop: 'fit',
-        background: 'white'
-      }
-    },
-    final: {
-      folder: 'mousepad/final',
-      transformation: {
-        quality: 'auto',
-        fetch_format: 'auto'
-      }
-    },
-    configuration: {
-      folder: 'mousepad/config',
-      transformation: {
-        quality: 'auto',
-        fetch_format: 'auto',
-        crop: 'fit',
-        background: 'white'
-      }
-    }
-  },
-  fallback: {
-    useOriginal: true,
-    continueOnError: true
+// Configure Cloudinary (lazy initialization for serverless)
+let cloudinaryConfigured = false;
+
+const configureCloudinary = () => {
+  if (!cloudinaryConfigured) {
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET
+    });
+    cloudinaryConfigured = true;
   }
 };
-
-/**
- * Process base64 image and upload to Cloudinary
- * @param {string} base64Image - Base64 encoded image string
- * @param {Object} imageType - Image type configuration
- * @returns {Promise<string>} - Cloudinary URL
- */
-async function processImage(base64Image, imageType, customTransformation) {
-  try {
-    // Check if the image is already a URL (not base64)
-    if (base64Image.startsWith('http')) {
-      return base64Image;
-    }
-
-    // Remove data URL prefix if present
-    let imageData = base64Image;
-    if (base64Image.startsWith('data:image/')) {
-      imageData = base64Image.split(',')[1];
-    }
-
-    // Upload to Cloudinary
-    const uploadResult = await cloudinary.uploader.upload(`data:image/jpeg;base64,${imageData}`,
-      {
-        folder: imageType.folder,
-        transformation: customTransformation || imageType.transformation,
-        resource_type: 'image',
-        format: 'jpg'
-      });
-
-    console.log(`Image uploaded to Cloudinary: ${uploadResult.secure_url}`);
-    return uploadResult.secure_url;
-  } catch (error) {
-    console.error('Error processing image:', error);
-    
-    if (imageConfig.fallback.useOriginal) {
-      console.log('Using original image due to processing error');
-      return base64Image;
-    }
-    
-    throw error;
-  }
-}
 
 /**
  * Delete image from Cloudinary
@@ -97,14 +30,34 @@ async function deleteImage(imageUrl) {
       return true; // Not a Cloudinary URL, nothing to delete
     }
 
+    configureCloudinary();
+
     // Extract public ID from URL
+    // Handle both formats: https://res.cloudinary.com/cloud/image/upload/v123/folder/file.jpg
     const urlParts = imageUrl.split('/');
-    const publicId = urlParts[urlParts.length - 1].split('.')[0];
-    const folder = urlParts[urlParts.length - 2];
-    const fullPublicId = `${folder}/${publicId}`;
+    const uploadIndex = urlParts.findIndex(part => part === 'upload');
+    
+    if (uploadIndex === -1) {
+      return false;
+    }
+
+    // Get everything after 'upload' and before file extension
+    const pathAfterUpload = urlParts.slice(uploadIndex + 1);
+    const lastPart = pathAfterUpload[pathAfterUpload.length - 1];
+    const publicId = lastPart.split('.')[0];
+    
+    // Reconstruct folder path if exists
+    const folderParts = pathAfterUpload.slice(0, -1);
+    const fullPublicId = folderParts.length > 0 
+      ? `${folderParts.join('/')}/${publicId}`
+      : publicId;
 
     const result = await cloudinary.uploader.destroy(fullPublicId);
-    console.log(`Image deleted from Cloudinary: ${fullPublicId}`);
+    
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`Image deleted from Cloudinary: ${fullPublicId}`);
+    }
+    
     return result.result === 'ok';
   } catch (error) {
     console.error('Error deleting image from Cloudinary:', error);
@@ -113,7 +66,5 @@ async function deleteImage(imageUrl) {
 }
 
 module.exports = {
-  processImage,
-  deleteImage,
-  imageConfig
+  deleteImage
 }; 
