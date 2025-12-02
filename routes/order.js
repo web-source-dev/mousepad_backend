@@ -178,5 +178,83 @@ router.get('/:orderId', isAuthenticated, async (req, res) => {
   }
 });
 
+// @desc    Update order payment status
+// @route   PATCH /api/order/:orderId/payment-status
+// @access  Private
+router.patch('/:orderId/payment-status', isAuthenticated, [
+  body('status').isIn(['pending', 'processing', 'completed', 'failed', 'refunded']).withMessage('Invalid payment status'),
+  body('paymentTransactionId').optional().isString()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      });
+    }
+
+    const { orderId } = req.params;
+    const { status, paymentTransactionId } = req.body;
+    const userId = req.user.id;
+
+    // Find order by orderId
+    const order = await Order.getOrderByOrderId(orderId);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found'
+      });
+    }
+
+    // Verify order belongs to user (unless admin)
+    if (order.user._id.toString() !== userId && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Not authorized to update this order'
+      });
+    }
+
+    // Update payment status
+    const updateData = {
+      paymentStatus: status
+    };
+
+    // Update order status based on payment status
+    if (status === 'completed') {
+      updateData.status = 'processing';
+    } else if (status === 'failed') {
+      updateData.status = 'paymentFailed';
+    }
+
+    // Add payment transaction ID if provided
+    if (paymentTransactionId) {
+      updateData.paymentTransactionId = paymentTransactionId;
+    }
+
+    // Update order
+    const updatedOrder = await Order.findByIdAndUpdate(
+      order._id,
+      { $set: updateData },
+      { new: true }
+    ).populate('user', 'email firstName lastName');
+
+    res.status(200).json({
+      success: true,
+      message: 'Order payment status updated successfully',
+      data: updatedOrder
+    });
+  } catch (error) {
+    console.error('Error updating order payment status:', error);
+    res.status(500).json({
+      success: false,
+      error: process.env.NODE_ENV === 'production' 
+        ? 'Server error while updating order payment status' 
+        : error.message
+    });
+  }
+});
+
 module.exports = router;
 
