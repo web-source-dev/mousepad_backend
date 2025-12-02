@@ -1,19 +1,15 @@
 const mongoose = require('mongoose');
 
 const cartItemSchema = new mongoose.Schema({
-  // User identification
-  userEmail: {
-    type: String,
+  // User identification - reference to User model
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
     required: true,
     index: true
   },
 
   // Basic item information
-  id: {
-    type: String,
-    required: true,
-    unique: true
-  },
   name: {
     type: String,
     required: true,
@@ -71,11 +67,11 @@ const cartItemSchema = new mongoose.Schema({
 });
 
 // Index for efficient queries
-cartItemSchema.index({ userEmail: 1, createdAt: -1 });
+cartItemSchema.index({ user: 1, createdAt: -1 });
 
 // Method to get cart items for a user
-cartItemSchema.statics.getUserCart = function(userEmail) {
-  return this.find({ userEmail }).sort({ createdAt: -1 });
+cartItemSchema.statics.getUserCart = function(userId) {
+  return this.find({ user: userId }).sort({ createdAt: -1 });
 };
 
 // Method to add item to cart
@@ -84,22 +80,22 @@ cartItemSchema.statics.addToCart = function(cartItemData) {
 };
 
 // Method to update cart item
-cartItemSchema.statics.updateCartItem = function(id, userEmail, updates) {
+cartItemSchema.statics.updateCartItem = function(_id, userId, updates) {
   return this.findOneAndUpdate(
-    { id, userEmail },
+    { _id, user: userId },
     updates,
     { new: true, runValidators: true }
   );
 };
 
 // Method to remove cart item
-cartItemSchema.statics.removeFromCart = function(id, userEmail) {
-  return this.findOneAndDelete({ id, userEmail });
+cartItemSchema.statics.removeFromCart = function(_id, userId) {
+  return this.findOneAndDelete({ _id, user: userId });
 };
 
 // Method to clear user's cart
-cartItemSchema.statics.clearUserCart = function(userEmail) {
-  return this.deleteMany({ userEmail });
+cartItemSchema.statics.clearUserCart = function(userId) {
+  return this.deleteMany({ user: userId });
 };
 
 module.exports = mongoose.model('CartItem', cartItemSchema); 

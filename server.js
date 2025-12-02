@@ -2,13 +2,17 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
+const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
 // Import database connection
 const connectDB = require('./config/database');
+const { CORS_ORIGINS } = require('./config/api');
 
 // Import routes
 const cartRoutes = require('./routes/cart');
+const authRoutes = require('./routes/auth');
+const orderRoutes = require('./routes/order');
 
 // Initialize express app
 const app = express();
@@ -19,12 +23,44 @@ connectDB();
 // Security middleware
 app.use(helmet());
 
-// CORS configuration
+// Cookie parser middleware
+app.use(cookieParser());
+
+// CORS configuration - allow all subdomains
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000' || 'https://evogear.rtnglobal.co' || "https://www.evogearstudio.com/cart-page?rc=test-site" || "https://www.evogearstudio.com",
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin matches any allowed pattern
+    const isAllowed = CORS_ORIGINS.some(allowed => {
+      if (typeof allowed === 'string') {
+        return origin === allowed || origin.includes(allowed);
+      } else if (allowed instanceof RegExp) {
+        return allowed.test(origin);
+      }
+      return false;
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      // Also allow known domains
+      if (origin.includes('.evogearstudio.com') || 
+          origin.includes('evogearstudio.com') ||
+          origin.includes('.vos.local') ||
+          origin.includes('vos.local')) {
+        callback(null, true);
+      } else {
+        console.warn(`CORS blocked origin: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
+  credentials: true, // Required for cookies
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Set-Cookie']
 }));
 
 // Compression middleware
@@ -45,7 +81,9 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
+app.use('/api/auth', authRoutes);
 app.use('/api/cart', cartRoutes);
+app.use('/api/order', orderRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

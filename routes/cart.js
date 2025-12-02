@@ -3,6 +3,7 @@ const router = express.Router();
 const CartItem = require('../models/CartItem');
 const { body, validationResult } = require('express-validator');
 const { deleteImage } = require('../utils/imageProcessor');
+const { isAuthenticated, authorize } = require('../middleware/auth');
 
 // Validate image URL (must be hosted, not base64)
 const validateImageUrl = (value, field, allowMissing) => {
@@ -20,10 +21,9 @@ const validateImageUrl = (value, field, allowMissing) => {
 };
 
 // Extract only essential fields for database storage
-const sanitizeCartPayload = (payload, { partial = false } = {}) => {
+const sanitizeCartPayload = (payload, userId, { partial = false } = {}) => {
   const essentialFields = {
-    userEmail: payload.userEmail,
-    id: payload.id,
+    user: userId,
     name: payload.name || 'Custom Mousepad',
     quantity: payload.quantity || 1,
     price: payload.price,
@@ -55,13 +55,11 @@ const sanitizeCartPayload = (payload, { partial = false } = {}) => {
 };
 
 // @desc    Get user's cart items
-// @route   GET /api/cart/:userEmail
-// @access  Public
-router.get('/:userEmail', async (req, res) => {
+// @route   GET /api/cart
+// @access  Private
+router.get('/', isAuthenticated, async (req, res) => {
   try {
-    const { userEmail } = req.params;
-    
-    const cartItems = await CartItem.getUserCart(userEmail);
+    const cartItems = await CartItem.getUserCart(req.user.id);
     
     res.status(200).json({
       success: true,
@@ -81,12 +79,12 @@ router.get('/:userEmail', async (req, res) => {
 
 // @desc    Add item to cart
 // @route   POST /api/cart
-// @access  Public
-router.post('/', async (req, res) => {
+// @access  Private
+router.post('/', isAuthenticated, async (req, res) => {
   try {
     let processedData;
     try {
-      processedData = sanitizeCartPayload(req.body);
+      processedData = sanitizeCartPayload(req.body, req.user.id);
     } catch (validationError) {
       return res.status(400).json({
         success: false,
@@ -94,28 +92,7 @@ router.post('/', async (req, res) => {
       });
     }
     
-    // Check if item with same ID already exists for this user
-    const existingItem = await CartItem.findOne({
-      id: processedData.id,
-      userEmail: processedData.userEmail
-    });
-
-    if (existingItem) {
-      // Update existing item
-      const updatedItem = await CartItem.updateCartItem(
-        processedData.id,
-        processedData.userEmail,
-        processedData
-      );
-
-      return res.status(200).json({
-        success: true,
-        message: 'Cart item updated successfully',
-        data: updatedItem
-      });
-    }
-
-    // Create new item
+    // Create new item (MongoDB will generate _id automatically)
     const newCartItem = await CartItem.addToCart(processedData);
 
     res.status(201).json({
@@ -135,23 +112,16 @@ router.post('/', async (req, res) => {
 });
 
 // @desc    Update cart item
-// @route   PUT /api/cart/:id
-// @access  Public
-router.put('/:id', async (req, res) => {
+// @route   PUT /api/cart/:_id
+// @access  Private
+router.put('/:_id', isAuthenticated, async (req, res) => {
   try {
-    const { id } = req.params;
-    const { userEmail, ...updates } = req.body;
-
-    if (!userEmail) {
-      return res.status(400).json({
-        success: false,
-        error: 'User email is required'
-      });
-    }
+    const { _id } = req.params;
+    const updates = req.body;
 
     let processedUpdates;
     try {
-      processedUpdates = sanitizeCartPayload(updates, { partial: true });
+      processedUpdates = sanitizeCartPayload(updates, req.user.id, { partial: true });
     } catch (validationError) {
       return res.status(400).json({
         success: false,
@@ -159,7 +129,10 @@ router.put('/:id', async (req, res) => {
       });
     }
 
-    const updatedItem = await CartItem.updateCartItem(id, userEmail, processedUpdates);
+    // Remove user field from updates (shouldn't be changed)
+    delete processedUpdates.user;
+
+    const updatedItem = await CartItem.updateCartItem(_id, req.user.id, processedUpdates);
 
     if (!updatedItem) {
       return res.status(404).json({
@@ -185,21 +158,13 @@ router.put('/:id', async (req, res) => {
 });
 
 // @desc    Remove item from cart
-// @route   DELETE /api/cart/:id
-// @access  Public
-router.delete('/:id', async (req, res) => {
+// @route   DELETE /api/cart/:_id
+// @access  Private
+router.delete('/:_id', isAuthenticated, async (req, res) => {
   try {
-    const { id } = req.params;
-    const { userEmail } = req.body;
+    const { _id } = req.params;
 
-    if (!userEmail) {
-      return res.status(400).json({
-        success: false,
-        error: 'User email is required'
-      });
-    }
-
-    const deletedItem = await CartItem.removeFromCart(id, userEmail);
+    const deletedItem = await CartItem.removeFromCart(_id, req.user.id);
 
     if (!deletedItem) {
       return res.status(404).json({
@@ -238,16 +203,14 @@ router.delete('/:id', async (req, res) => {
 });
 
 // @desc    Clear user's cart
-// @route   DELETE /api/cart/clear/:userEmail
-// @access  Public
-router.delete('/clear/:userEmail', async (req, res) => {
+// @route   DELETE /api/cart/clear
+// @access  Private
+router.delete('/clear', isAuthenticated, async (req, res) => {
   try {
-    const { userEmail } = req.params;
-    
     // Get cart items before clearing to clean up images
-    const cartItems = await CartItem.getUserCart(userEmail);
+    const cartItems = await CartItem.getUserCart(req.user.id);
     
-    const result = await CartItem.clearUserCart(userEmail);
+    const result = await CartItem.clearUserCart(req.user.id);
 
     // Clean up images from Cloudinary
     try {
@@ -281,13 +244,11 @@ router.delete('/clear/:userEmail', async (req, res) => {
 });
 
 // @desc    Get cart summary (count and total price)
-// @route   GET /api/cart/summary/:userEmail
-// @access  Public
-router.get('/summary/:userEmail', async (req, res) => {
+// @route   GET /api/cart/summary
+// @access  Private
+router.get('/summary', isAuthenticated, async (req, res) => {
   try {
-    const { userEmail } = req.params;
-    
-    const cartItems = await CartItem.getUserCart(userEmail);
+    const cartItems = await CartItem.getUserCart(req.user.id);
     
     const summary = cartItems.reduce((acc, item) => {
       acc.itemCount += item.quantity;
@@ -314,8 +275,7 @@ router.get('/summary/:userEmail', async (req, res) => {
   }
 });
 
-router.patch('/payment', [
-  body('email').isEmail().withMessage('Valid email is required'),
+router.patch('/payment', isAuthenticated, [
   body('status').isIn(['pending', 'paymentFailed', 'paymentSuccess', 'cancelled']).withMessage('Valid payment status is required'),
   body('itemIds').isArray({ min: 1 }).withMessage('itemIds must be a non-empty array')
 ], async (req, res) => {
@@ -329,11 +289,11 @@ router.patch('/payment', [
       });
     }
 
-    const { email, status, itemIds } = req.body;
+    const { status, itemIds } = req.body;
 
-    // Find matching cart items by email and ID
+    // Find matching cart items by user and _id
     const updated = await CartItem.updateMany(
-      { userEmail: email, id: { $in: itemIds } },
+      { user: req.user.id, _id: { $in: itemIds } },
       { $set: { status: status, updatedAt: new Date() } }
     );
 
@@ -361,10 +321,10 @@ router.patch('/payment', [
 
 // @desc    Get all cart items (admin endpoint)
 // @route   GET /api/cart/admin/all
-// @access  Public (you might want to add authentication later)
-router.get('/admin/all', async (req, res) => {
+// @access  Private (Admin only)
+router.get('/admin/all', isAuthenticated, authorize('admin'), async (req, res) => {
   try {
-    const cartItems = await CartItem.find({}).sort({ createdAt: -1 });
+    const cartItems = await CartItem.find({}).populate('user', 'email firstName lastName').sort({ createdAt: -1 });
     
     res.status(200).json({
       success: true,
