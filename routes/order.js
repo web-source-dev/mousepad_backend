@@ -5,11 +5,6 @@ const CartItem = require('../models/CartItem');
 const { isAuthenticated } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 
-// Generate unique order ID
-const generateOrderId = () => {
-  return `ORDER_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-};
-
 // @desc    Create new order from checkout
 // @route   POST /api/order
 // @access  Private
@@ -56,7 +51,6 @@ router.post('/', isAuthenticated, [
     // Create order data
     const orderData = {
       user: userId,
-      orderId: generateOrderId(),
       items: items.map(item => {
         const cartItem = cartItems.find(ci => ci._id.toString() === item.cartItemId);
         return {
@@ -140,13 +134,13 @@ router.get('/', isAuthenticated, async (req, res) => {
   }
 });
 
-// @desc    Get order by orderId
-// @route   GET /api/order/:orderId
+// @desc    Get order by _id
+// @route   GET /api/order/:_id
 // @access  Private
-router.get('/:orderId', isAuthenticated, async (req, res) => {
+router.get('/:_id', isAuthenticated, async (req, res) => {
   try {
-    const { orderId } = req.params;
-    const order = await Order.getOrderByOrderId(orderId);
+    const { _id } = req.params;
+    const order = await Order.getOrderById(_id);
 
     if (!order) {
       return res.status(404).json({
@@ -179,9 +173,9 @@ router.get('/:orderId', isAuthenticated, async (req, res) => {
 });
 
 // @desc    Update order payment status
-// @route   PATCH /api/order/:orderId/payment-status
+// @route   PATCH /api/order/:_id/payment-status
 // @access  Private
-router.patch('/:orderId/payment-status', isAuthenticated, [
+router.patch('/:_id/payment-status', isAuthenticated, [
   body('status').isIn(['pending', 'processing', 'completed', 'failed', 'refunded']).withMessage('Invalid payment status'),
   body('paymentTransactionId').optional().isString()
 ], async (req, res) => {
@@ -194,12 +188,12 @@ router.patch('/:orderId/payment-status', isAuthenticated, [
       });
     }
 
-    const { orderId } = req.params;
+    const { _id } = req.params;
     const { status, paymentTransactionId } = req.body;
     const userId = req.user.id;
 
-    // Find order by orderId
-    const order = await Order.getOrderByOrderId(orderId);
+    // Find order by _id
+    const order = await Order.getOrderById(_id);
 
     if (!order) {
       return res.status(404).json({

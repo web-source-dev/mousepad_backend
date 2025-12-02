@@ -9,14 +9,6 @@ const orderSchema = new mongoose.Schema({
     index: true
   },
 
-  // Order identification
-  orderId: {
-    type: String,
-    required: true,
-    unique: true,
-    index: true
-  },
-
   // Order items - store cart item references and snapshot data
   items: [{
     cartItemId: {
@@ -104,7 +96,6 @@ const orderSchema = new mongoose.Schema({
 
 // Index for efficient queries
 orderSchema.index({ user: 1, createdAt: -1 });
-orderSchema.index({ orderId: 1 });
 orderSchema.index({ status: 1 });
 
 // Method to create order
@@ -117,9 +108,9 @@ orderSchema.statics.getUserOrders = function(userId) {
   return this.find({ user: userId }).sort({ createdAt: -1 });
 };
 
-// Method to get order by orderId
-orderSchema.statics.getOrderByOrderId = function(orderId) {
-  return this.findOne({ orderId }).populate('user', 'email firstName lastName');
+// Method to get order by _id
+orderSchema.statics.getOrderById = function(orderId) {
+  return this.findOne({ _id: orderId }).populate('user', 'email firstName lastName');
 };
 
 module.exports = mongoose.model('Order', orderSchema);
