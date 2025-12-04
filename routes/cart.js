@@ -3,7 +3,19 @@ const router = express.Router();
 const CartItem = require('../models/CartItem');
 const { body, validationResult } = require('express-validator');
 const { deleteImage } = require('../utils/imageProcessor');
-const { isAuthenticated, authorize } = require('../middleware/auth');
+
+// Middleware to get userId from request body, query params, or headers
+const getUserId = (req, res, next) => {
+  const userId = req.body.userId || req.query.userId || req.headers['x-user-id'];
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      error: 'User ID is required'
+    });
+  }
+  req.userId = userId;
+  next();
+};
 
 // Validate image URL (must be hosted, not base64)
 const validateImageUrl = (value, field, allowMissing) => {
@@ -23,7 +35,7 @@ const validateImageUrl = (value, field, allowMissing) => {
 // Extract only essential fields for database storage
 const sanitizeCartPayload = (payload, userId, { partial = false } = {}) => {
   const essentialFields = {
-    user: userId,
+    userId: userId,
     name: payload.name || 'Custom Mousepad',
     quantity: payload.quantity || 1,
     price: payload.price,
@@ -56,10 +68,10 @@ const sanitizeCartPayload = (payload, userId, { partial = false } = {}) => {
 
 // @desc    Get user's cart items
 // @route   GET /api/cart
-// @access  Private
-router.get('/', isAuthenticated, async (req, res) => {
+// @access  Public (with userId)
+router.get('/', getUserId, async (req, res) => {
   try {
-    const cartItems = await CartItem.getUserCart(req.user.id);
+    const cartItems = await CartItem.getUserCart(req.userId);
     
     res.status(200).json({
       success: true,
@@ -79,12 +91,12 @@ router.get('/', isAuthenticated, async (req, res) => {
 
 // @desc    Add item to cart
 // @route   POST /api/cart
-// @access  Private
-router.post('/', isAuthenticated, async (req, res) => {
+// @access  Public (with userId)
+router.post('/', getUserId, async (req, res) => {
   try {
     let processedData;
     try {
-      processedData = sanitizeCartPayload(req.body, req.user.id);
+      processedData = sanitizeCartPayload(req.body, req.userId);
     } catch (validationError) {
       return res.status(400).json({
         success: false,
@@ -113,15 +125,15 @@ router.post('/', isAuthenticated, async (req, res) => {
 
 // @desc    Update cart item
 // @route   PUT /api/cart/:_id
-// @access  Private
-router.put('/:_id', isAuthenticated, async (req, res) => {
+// @access  Public (with userId)
+router.put('/:_id', getUserId, async (req, res) => {
   try {
     const { _id } = req.params;
     const updates = req.body;
 
     let processedUpdates;
     try {
-      processedUpdates = sanitizeCartPayload(updates, req.user.id, { partial: true });
+      processedUpdates = sanitizeCartPayload(updates, req.userId, { partial: true });
     } catch (validationError) {
       return res.status(400).json({
         success: false,
@@ -129,10 +141,10 @@ router.put('/:_id', isAuthenticated, async (req, res) => {
       });
     }
 
-    // Remove user field from updates (shouldn't be changed)
-    delete processedUpdates.user;
+    // Remove userId field from updates (shouldn't be changed)
+    delete processedUpdates.userId;
 
-    const updatedItem = await CartItem.updateCartItem(_id, req.user.id, processedUpdates);
+    const updatedItem = await CartItem.updateCartItem(_id, req.userId, processedUpdates);
 
     if (!updatedItem) {
       return res.status(404).json({
@@ -159,12 +171,12 @@ router.put('/:_id', isAuthenticated, async (req, res) => {
 
 // @desc    Remove item from cart
 // @route   DELETE /api/cart/:_id
-// @access  Private
-router.delete('/:_id', isAuthenticated, async (req, res) => {
+// @access  Public (with userId)
+router.delete('/:_id', getUserId, async (req, res) => {
   try {
     const { _id } = req.params;
 
-    const deletedItem = await CartItem.removeFromCart(_id, req.user.id);
+    const deletedItem = await CartItem.removeFromCart(_id, req.userId);
 
     if (!deletedItem) {
       return res.status(404).json({
@@ -204,13 +216,13 @@ router.delete('/:_id', isAuthenticated, async (req, res) => {
 
 // @desc    Clear user's cart
 // @route   DELETE /api/cart/clear
-// @access  Private
-router.delete('/clear', isAuthenticated, async (req, res) => {
+// @access  Public (with userId)
+router.delete('/clear', getUserId, async (req, res) => {
   try {
     // Get cart items before clearing to clean up images
-    const cartItems = await CartItem.getUserCart(req.user.id);
+    const cartItems = await CartItem.getUserCart(req.userId);
     
-    const result = await CartItem.clearUserCart(req.user.id);
+    const result = await CartItem.clearUserCart(req.userId);
 
     // Clean up images from Cloudinary
     try {
@@ -245,10 +257,10 @@ router.delete('/clear', isAuthenticated, async (req, res) => {
 
 // @desc    Get cart summary (count and total price)
 // @route   GET /api/cart/summary
-// @access  Private
-router.get('/summary', isAuthenticated, async (req, res) => {
+// @access  Public (with userId)
+router.get('/summary', getUserId, async (req, res) => {
   try {
-    const cartItems = await CartItem.getUserCart(req.user.id);
+    const cartItems = await CartItem.getUserCart(req.userId);
     
     const summary = cartItems.reduce((acc, item) => {
       acc.itemCount += item.quantity;
@@ -275,7 +287,7 @@ router.get('/summary', isAuthenticated, async (req, res) => {
   }
 });
 
-router.patch('/payment', isAuthenticated, [
+router.patch('/payment', getUserId, [
   body('status').isIn(['pending', 'paymentFailed', 'paymentSuccess', 'cancelled']).withMessage('Valid payment status is required'),
   body('itemIds').isArray({ min: 1 }).withMessage('itemIds must be a non-empty array')
 ], async (req, res) => {
@@ -291,9 +303,9 @@ router.patch('/payment', isAuthenticated, [
 
     const { status, itemIds } = req.body;
 
-    // Find matching cart items by user and _id
+    // Find matching cart items by userId and _id
     const updated = await CartItem.updateMany(
-      { user: req.user.id, _id: { $in: itemIds } },
+      { userId: req.userId, _id: { $in: itemIds } },
       { $set: { status: status, updatedAt: new Date() } }
     );
 
@@ -321,10 +333,10 @@ router.patch('/payment', isAuthenticated, [
 
 // @desc    Get all cart items (admin endpoint)
 // @route   GET /api/cart/admin/all
-// @access  Private (Admin only)
-router.get('/admin/all', isAuthenticated, authorize('admin'), async (req, res) => {
+// @access  Public
+router.get('/admin/all', async (req, res) => {
   try {
-    const cartItems = await CartItem.find({}).populate('user', 'email firstName lastName').sort({ createdAt: -1 });
+    const cartItems = await CartItem.find({}).sort({ createdAt: -1 });
     
     res.status(200).json({
       success: true,

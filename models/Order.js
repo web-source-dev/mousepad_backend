@@ -1,10 +1,9 @@
 const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
-  // User reference
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+  // User identification - simple string ID from localStorage
+  userId: {
+    type: String,
     required: true,
     index: true
   },
@@ -95,7 +94,7 @@ const orderSchema = new mongoose.Schema({
 });
 
 // Index for efficient queries
-orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ userId: 1, createdAt: -1 });
 orderSchema.index({ status: 1 });
 
 // Method to create order
@@ -105,12 +104,12 @@ orderSchema.statics.createOrder = function(orderData) {
 
 // Method to get user's orders
 orderSchema.statics.getUserOrders = function(userId) {
-  return this.find({ user: userId }).sort({ createdAt: -1 });
+  return this.find({ userId: userId }).sort({ createdAt: -1 });
 };
 
 // Method to get order by _id
 orderSchema.statics.getOrderById = function(orderId) {
-  return this.findOne({ _id: orderId }).populate('user', 'email firstName lastName');
+  return this.findOne({ _id: orderId });
 };
 
 module.exports = mongoose.model('Order', orderSchema);

@@ -11,7 +11,6 @@ const { CORS_ORIGINS } = require('./config/api');
 
 // Import routes
 const cartRoutes = require('./routes/cart');
-const authRoutes = require('./routes/auth');
 const orderRoutes = require('./routes/order');
 
 // Initialize express app
@@ -57,10 +56,10 @@ app.use(cors({
       }
     }
   },
-  credentials: true, // Required for cookies
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  exposedHeaders: ['Set-Cookie']
+  allowedHeaders: ['Content-Type', 'X-User-Id'],
+  exposedHeaders: []
 }));
 
 // Compression middleware
@@ -81,7 +80,6 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
-app.use('/api/auth', authRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/order', orderRoutes);
 

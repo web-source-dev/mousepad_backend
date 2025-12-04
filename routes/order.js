@@ -2,13 +2,25 @@ const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order');
 const CartItem = require('../models/CartItem');
-const { isAuthenticated } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
+
+// Middleware to get userId from request body, query params, or headers
+const getUserId = (req, res, next) => {
+  const userId = req.body.userId || req.query.userId || req.headers['x-user-id'];
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      error: 'User ID is required'
+    });
+  }
+  req.userId = userId;
+  next();
+};
 
 // @desc    Create new order from checkout
 // @route   POST /api/order
-// @access  Private
-router.post('/', isAuthenticated, [
+// @access  Public (with userId)
+router.post('/', getUserId, [
   body('items').isArray({ min: 1 }).withMessage('At least one item is required'),
   body('items.*.cartItemId').notEmpty().withMessage('Cart item ID is required'),
   body('subtotal').isNumeric().withMessage('Subtotal must be a number'),
@@ -32,13 +44,13 @@ router.post('/', isAuthenticated, [
     }
 
     const { items, subtotal, shipping, tax, total, currency, customerInfo } = req.body;
-    const userId = req.user.id;
+    const userId = req.userId;
 
     // Verify all cart items belong to the user
     const cartItemIds = items.map(item => item.cartItemId);
     const cartItems = await CartItem.find({
       _id: { $in: cartItemIds },
-      user: userId
+      userId: userId
     });
 
     if (cartItems.length !== cartItemIds.length) {
@@ -50,7 +62,7 @@ router.post('/', isAuthenticated, [
 
     // Create order data
     const orderData = {
-      user: userId,
+      userId: userId,
       items: items.map(item => {
         const cartItem = cartItems.find(ci => ci._id.toString() === item.cartItemId);
         return {
@@ -92,9 +104,6 @@ router.post('/', isAuthenticated, [
     // Create order
     const order = await Order.createOrder(orderData);
 
-    // Populate user data for response
-    await order.populate('user', 'email firstName lastName');
-
     res.status(201).json({
       success: true,
       message: 'Order created successfully',
@@ -113,10 +122,10 @@ router.post('/', isAuthenticated, [
 
 // @desc    Get user's orders
 // @route   GET /api/order
-// @access  Private
-router.get('/', isAuthenticated, async (req, res) => {
+// @access  Public (with userId)
+router.get('/', getUserId, async (req, res) => {
   try {
-    const orders = await Order.getUserOrders(req.user.id);
+    const orders = await Order.getUserOrders(req.userId);
     
     res.status(200).json({
       success: true,
@@ -136,8 +145,8 @@ router.get('/', isAuthenticated, async (req, res) => {
 
 // @desc    Get order by _id
 // @route   GET /api/order/:_id
-// @access  Private
-router.get('/:_id', isAuthenticated, async (req, res) => {
+// @access  Public (with userId)
+router.get('/:_id', getUserId, async (req, res) => {
   try {
     const { _id } = req.params;
     const order = await Order.getOrderById(_id);
@@ -149,8 +158,8 @@ router.get('/:_id', isAuthenticated, async (req, res) => {
       });
     }
 
-    // Verify order belongs to user (unless admin)
-    if (order.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
+    // Verify order belongs to user
+    if (order.userId !== req.userId) {
       return res.status(403).json({
         success: false,
         error: 'Not authorized to access this order'
@@ -174,8 +183,8 @@ router.get('/:_id', isAuthenticated, async (req, res) => {
 
 // @desc    Update order payment status
 // @route   PATCH /api/order/:_id/payment-status
-// @access  Private
-router.patch('/:_id/payment-status', isAuthenticated, [
+// @access  Public (with userId)
+router.patch('/:_id/payment-status', getUserId, [
   body('status').isIn(['pending', 'processing', 'completed', 'failed', 'refunded']).withMessage('Invalid payment status'),
   body('paymentTransactionId').optional().isString()
 ], async (req, res) => {
@@ -190,7 +199,7 @@ router.patch('/:_id/payment-status', isAuthenticated, [
 
     const { _id } = req.params;
     const { status, paymentTransactionId } = req.body;
-    const userId = req.user.id;
+    const userId = req.userId;
 
     // Find order by _id
     const order = await Order.getOrderById(_id);
@@ -202,8 +211,8 @@ router.patch('/:_id/payment-status', isAuthenticated, [
       });
     }
 
-    // Verify order belongs to user (unless admin)
-    if (order.user._id.toString() !== userId && req.user.role !== 'admin') {
+    // Verify order belongs to user
+    if (order.userId !== userId) {
       return res.status(403).json({
         success: false,
         error: 'Not authorized to update this order'
@@ -232,7 +241,7 @@ router.patch('/:_id/payment-status', isAuthenticated, [
       order._id,
       { $set: updateData },
       { new: true }
-    ).populate('user', 'email firstName lastName');
+    );
 
     res.status(200).json({
       success: true,
