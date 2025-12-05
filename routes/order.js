@@ -143,6 +143,59 @@ router.get('/', getUserId, async (req, res) => {
   }
 });
 
+// @desc    Get all orders (admin endpoint)
+// @route   GET /api/order/admin/all
+// @access  Public
+router.get('/admin/all', async (req, res) => {
+  try {
+    const orders = await Order.find({}).sort({ createdAt: -1 });
+    
+    res.status(200).json({
+      success: true,
+      count: orders.length,
+      data: orders
+    });
+  } catch (error) {
+    console.error('Error fetching all orders:', error);
+    res.status(500).json({
+      success: false,
+      error: process.env.NODE_ENV === 'production' 
+        ? 'Server error while fetching all orders' 
+        : error.message
+    });
+  }
+});
+
+// @desc    Get order by _id (admin endpoint)
+// @route   GET /api/order/admin/:_id
+// @access  Public
+router.get('/admin/:_id', async (req, res) => {
+  try {
+    const { _id } = req.params;
+    const order = await Order.getOrderById(_id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: order
+    });
+  } catch (error) {
+    console.error('Error fetching order:', error);
+    res.status(500).json({
+      success: false,
+      error: process.env.NODE_ENV === 'production' 
+        ? 'Server error while fetching order' 
+        : error.message
+    });
+  }
+});
+
 // @desc    Get order by _id
 // @route   GET /api/order/:_id
 // @access  Public (with userId)
