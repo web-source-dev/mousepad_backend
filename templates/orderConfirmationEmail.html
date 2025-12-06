@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Order Received</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f4f4f4;
+    }
+    .email-container {
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .email-header {
+      background: #141f43;
+      color: #ffffff;
+      padding: 30px 20px;
+      text-align: center;
+    }
+    .email-header h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+    }
+    .email-body {
+      padding: 30px 20px;
+    }
+    .order-info {
+      background-color: #f8f9fa;
+      border-left: 4px solid #667eea;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .order-info h2 {
+      margin: 0 0 10px 0;
+      color: #667eea;
+      font-size: 18px;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .info-label {
+      font-weight: 600;
+      color: #666666;
+    }
+    .info-value {
+      color: #333333;
+    }
+    .order-items {
+      margin: 25px 0;
+    }
+    .order-items h3 {
+      color: #333333;
+      font-size: 18px;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #667eea;
+    }
+    .item {
+      background-color: #f8f9fa;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 4px;
+      border-left: 3px solid #667eea;
+    }
+    .item-name {
+      font-weight: 600;
+      font-size: 16px;
+      color: #333333;
+      margin-bottom: 8px;
+    }
+    .item-details {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      font-size: 14px;
+      color: #666666;
+      margin-top: 10px;
+    }
+    .item-detail-label {
+      font-weight: 600;
+    }
+    .pricing-summary {
+      background-color: #f8f9fa;
+      padding: 20px;
+      margin: 25px 0;
+      border-radius: 4px;
+    }
+    .pricing-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+    .pricing-row.total {
+      border-top: 2px solid #667eea;
+      margin-top: 10px;
+      padding-top: 15px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #667eea;
+    }
+    .customer-info {
+      background-color: #f8f9fa;
+      padding: 20px;
+      margin: 25px 0;
+      border-radius: 4px;
+    }
+    .customer-info h3 {
+      color: #333333;
+      font-size: 18px;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #667eea;
+    }
+    .address-block {
+      margin-top: 10px;
+      line-height: 1.8;
+    }
+    .footer {
+      background-color: #f8f9fa;
+      padding: 20px;
+      text-align: center;
+      color: #666666;
+      font-size: 14px;
+      border-top: 1px solid #e0e0e0;
+    }
+    .button {
+      display: inline-block;
+      padding: 12px 24px;
+      background-color: #667eea;
+      color: #ffffff;
+      text-decoration: none;
+      border-radius: 4px;
+      margin: 20px 0;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      <h1>New Order Received</h1>
+    </div>
+    
+    <div class="email-body">
+      <div class="customer-info">
+        <h3>Customer Information</h3>
+        <p><strong>Name:</strong> {{CUSTOMER_NAME}}</p>
+        <p><strong>Email:</strong> {{CUSTOMER_EMAIL}}</p>
+        <p><strong>Phone:</strong> {{CUSTOMER_PHONE}}</p>
+        <div class="address-block">
+          <strong>Shipping Address:</strong><br>
+          {{CUSTOMER_ADDRESS}}
+        </div>
+        <p style="margin-top: 15px;"><strong>Additional Notes:</strong><br>{{ADDITIONAL_NOTES}}</p>
+      </div>
+
+      <div class="order-items">
+        <h3>Order Items</h3>
+        {{ITEMS_LIST}}
+      </div>
+
+      <div class="pricing-summary">
+        <h3 style="margin-top: 0; color: #333333; font-size: 18px; padding-bottom: 10px; border-bottom: 2px solid #667eea;">Pricing Summary</h3>
+        <div class="pricing-row">
+          <span>Subtotal:</span>
+          <span>{{SUBTOTAL}}</span>
+        </div>
+        <div class="pricing-row">
+          <span>Shipping:</span>
+          <span>{{SHIPPING}}</span>
+        </div>
+        <div class="pricing-row">
+          <span>Tax:</span>
+          <span>{{TAX}}</span>
+        </div>
+        <div class="pricing-row total">
+          <span>Total:</span>
+          <span>{{TOTAL}}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
