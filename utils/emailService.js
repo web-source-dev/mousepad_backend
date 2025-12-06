@@ -1,4 +1,4 @@
-const brevo = require('@getbrevo/brevo');
+const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const emailConfig = require('../config/email');
@@ -152,42 +152,68 @@ async function sendOrderConfirmationEmail(order) {
     // Replace placeholders in template
     const htmlContent = replaceTemplatePlaceholders(template, templateData);
 
-    // Brevo v3 API - Proper initialization
-    // Create API instance
-    const apiInstance = new brevo.TransactionalEmailsApi();
-    
-    // Set the API key in the authentications object
-    // In Brevo v3, the authentication key is 'apiKey' (not 'api-key')
-    apiInstance.authentications.apiKey.apiKey = emailConfig.brevo.apiKey;
-
-    // Create email send request using SendSmtpEmail class
-    const sendSmtpEmail = new brevo.SendSmtpEmail();
-    sendSmtpEmail.subject = `New Order Received - Order #${order._id.toString().slice(-8)}`;
-    sendSmtpEmail.htmlContent = htmlContent;
-    sendSmtpEmail.sender = {
-      name: emailConfig.brevo.senderName,
-      email: emailConfig.brevo.senderEmail
+    // Prepare email payload for Brevo API
+    const payload = {
+      sender: {
+        name: emailConfig.brevo.senderName,
+        email: emailConfig.brevo.senderEmail
+      },
+      to: [{
+        email: emailConfig.adminEmail
+      }],
+      subject: `New Order Received - Order #${order._id.toString().slice(-8)}`,
+      htmlContent: htmlContent
     };
-    sendSmtpEmail.to = [{
-      email: emailConfig.adminEmail
-    }];
 
-    // Send email via Brevo
-    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    // Send email via Brevo API using axios
+    const response = await axios.post(
+      'https://api.brevo.com/v3/smtp/email',
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': emailConfig.brevo.apiKey,
+          'Connection': 'close'
+        },
+        timeout: 15000
+      }
+    );
 
-    console.log('Order confirmation email sent successfully:', result.messageId);
+    console.log('Order confirmation email sent successfully:', response.data?.messageId || 'Success');
     return {
       success: true,
-      messageId: result.messageId,
+      messageId: response.data?.messageId || response.data?.id,
       message: 'Email sent successfully'
     };
 
   } catch (error) {
     console.error('Error sending order confirmation email:', error);
+    
+    // Provide detailed error information
+    let errorMessage = error.message || 'Failed to send email';
+    
+    if (error.response) {
+      // Axios error with response
+      const status = error.response.status;
+      const data = error.response.data || {};
+      
+      if (status === 401) {
+        errorMessage = `Authentication failed (401): ${data.message || 'API Key is invalid or not enabled. Please verify your BREVO_API_KEY in .env file and ensure its enabled in your Brevo dashboard at https://app.brevo.com/settings/keys/api'}`
+      } else if (status === 400) {
+        errorMessage = `Bad request (400): ${data.message || 'Invalid email data. Please check sender email is verified in Brevo dashboard.'}`;
+      } else if (status === 403) {
+        errorMessage = `Forbidden (403): ${data.message || 'API key does not have permission to send emails'}`;
+      } else {
+        errorMessage = `API error (${status}): ${data.message || errorMessage}`;
+      }
+    } else if (error.request) {
+      errorMessage = 'No response from Brevo API. Please check your internet connection and try again.';
+    }
+    
     // Don't throw error - email failure shouldn't break order creation
     return {
       success: false,
-      error: error.message || 'Failed to send email'
+      error: errorMessage
     };
   }
 }
