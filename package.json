@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "vercel-build": "echo 'No build step required'"
+    "vercel-build": "echo 'No build step required'",
+    "test-email": "node scripts/test-email.js"
   },
   "dependencies": {
     "@getbrevo/brevo": "^3.0.1",

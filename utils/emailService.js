@@ -152,65 +152,28 @@ async function sendOrderConfirmationEmail(order) {
     // Replace placeholders in template
     const htmlContent = replaceTemplatePlaceholders(template, templateData);
 
-    // Brevo v3 API - Initialize with API key
-    // Create a plain object for email data (Brevo v3 uses simpler structure)
-    const sendSmtpEmail = {
-      sender: {
-        name: emailConfig.brevo.senderName,
-        email: emailConfig.brevo.senderEmail
-      },
-      to: [{
-        email: emailConfig.adminEmail
-      }],
-      subject: `New Order Received - Order #${order._id.toString().slice(-8)}`,
-      htmlContent: htmlContent
-    };
-
-    // Create API instance - Brevo v3 pattern
+    // Brevo v3 API - Proper initialization
+    // Create API instance
     const apiInstance = new brevo.TransactionalEmailsApi();
     
-    // Configure authentication - try multiple methods for compatibility
-    try {
-      // Method 1: Try setting API key via default client
-      if (typeof brevo !== 'undefined' && brevo.ApiClient) {
-        const defaultClient = brevo.ApiClient.instance || brevo.ApiClient;
-        if (defaultClient) {
-          defaultClient.authentications = defaultClient.authentications || {};
-          defaultClient.authentications['api-key'] = {
-            apiKey: emailConfig.brevo.apiKey
-          };
-        }
-      }
-      
-      // Method 2: Set environment variable (some SDKs read from env)
-      process.env.BREVO_API_KEY = emailConfig.brevo.apiKey;
-      
-      // Method 3: Try setting on instance directly
-      if (apiInstance.setDefaultAuthentication) {
-        apiInstance.setDefaultAuthentication('api-key', emailConfig.brevo.apiKey);
-      }
-    } catch (authError) {
-      // Continue anyway - some SDK versions handle auth differently
-      console.warn('Could not set API key via standard method:', authError.message);
-    }
+    // Set the API key in the authentications object
+    // In Brevo v3, the authentication key is 'apiKey' (not 'api-key')
+    apiInstance.authentications.apiKey.apiKey = emailConfig.brevo.apiKey;
 
-    // Send email via Brevo - pass auth in options if needed
-    let result;
-    try {
-      result = await apiInstance.sendTransacEmail(sendSmtpEmail);
-    } catch (sendError) {
-      // If first attempt fails, try with explicit auth
-      if (sendError.message && sendError.message.includes('authentication')) {
-        // Retry with auth header
-        result = await apiInstance.sendTransacEmail(sendSmtpEmail, {
-          headers: {
-            'api-key': emailConfig.brevo.apiKey
-          }
-        });
-      } else {
-        throw sendError;
-      }
-    }
+    // Create email send request using SendSmtpEmail class
+    const sendSmtpEmail = new brevo.SendSmtpEmail();
+    sendSmtpEmail.subject = `New Order Received - Order #${order._id.toString().slice(-8)}`;
+    sendSmtpEmail.htmlContent = htmlContent;
+    sendSmtpEmail.sender = {
+      name: emailConfig.brevo.senderName,
+      email: emailConfig.brevo.senderEmail
+    };
+    sendSmtpEmail.to = [{
+      email: emailConfig.adminEmail
+    }];
+
+    // Send email via Brevo
+    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
 
     console.log('Order confirmation email sent successfully:', result.messageId);
     return {
