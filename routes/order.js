@@ -3,7 +3,6 @@ const router = express.Router();
 const Order = require('../models/Order');
 const CartItem = require('../models/CartItem');
 const { body, validationResult } = require('express-validator');
-const { sendOrderConfirmationEmail } = require('../utils/emailService');
 
 // Middleware to get userId from request body, query params, or headers
 const getUserId = (req, res, next) => {
@@ -296,14 +295,6 @@ router.patch('/:_id/payment-status', getUserId, [
       { $set: updateData },
       { new: true }
     );
-
-    // Send order confirmation email to admin when payment is completed
-    // if (status === 'completed') {
-      sendOrderConfirmationEmail(updatedOrder).catch(err => {
-        console.error('Failed to send order confirmation email:', err);
-        // Don't fail the status update if email fails
-      });
-    // }
 
     res.status(200).json({
       success: true,
