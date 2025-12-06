@@ -298,12 +298,12 @@ router.patch('/:_id/payment-status', getUserId, [
     );
 
     // Send order confirmation email to admin when payment is completed
-    // if (status === 'completed') {
+    if (status === 'completed') {
       sendOrderConfirmationEmail(updatedOrder).catch(err => {
         console.error('Failed to send order confirmation email:', err);
         // Don't fail the status update if email fails
       });
-    // }
+    }
 
     res.status(200).json({
       success: true,
