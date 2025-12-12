@@ -31,7 +31,7 @@ const cartItemSchema = new mongoose.Schema({
     default: 'USD'
   },
 
-  // Image URLs (hosted on Cloudinary)
+  // Image data (base64 data URLs stored directly in database)
   finalImage: {
     type: String,
     required: true

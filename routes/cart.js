@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const CartItem = require('../models/CartItem');
 const { body, validationResult } = require('express-validator');
-const { deleteImage } = require('../utils/imageProcessor');
 
 // Middleware to get userId from request body, query params, or headers
 const getUserId = (req, res, next) => {
@@ -17,17 +16,18 @@ const getUserId = (req, res, next) => {
   next();
 };
 
-// Validate image URL (must be hosted, not base64)
+// Validate image (can be base64 data URL or regular URL)
 const validateImageUrl = (value, field, allowMissing) => {
   if (!value) {
     if (allowMissing) return value;
     throw new Error(`${field} is required`);
   }
   if (typeof value !== 'string') {
-    throw new Error(`${field} must be a string URL`);
+    throw new Error(`${field} must be a string`);
   }
-  if (value.startsWith('data:')) {
-    throw new Error(`${field} must be uploaded before saving`);
+  // Accept both base64 data URLs and regular URLs
+  if (!value.startsWith('data:image/') && !value.startsWith('http://') && !value.startsWith('https://')) {
+    throw new Error(`${field} must be a valid image data URL or URL`);
   }
   return value;
 };
@@ -185,18 +185,8 @@ router.delete('/:_id', getUserId, async (req, res) => {
       });
     }
 
-    // Clean up stored images (final + original)
-    try {
-      if (deletedItem.finalImage) {
-        await deleteImage(deletedItem.finalImage);
-      }
-      if (deletedItem.originalImageUrl) {
-        await deleteImage(deletedItem.originalImageUrl);
-      }
-    } catch (cleanupError) {
-      console.error('Error cleaning up images:', cleanupError);
-      // Don't fail the request if cleanup fails
-    }
+    // No need to clean up images - they're stored as base64 in the database
+    // Images are automatically removed when the document is deleted
 
     res.status(200).json({
       success: true,
@@ -224,20 +214,8 @@ router.delete('/clear', getUserId, async (req, res) => {
     
     const result = await CartItem.clearUserCart(req.userId);
 
-    // Clean up images from Cloudinary
-    try {
-      for (const item of cartItems) {
-        if (item.finalImage) {
-          await deleteImage(item.finalImage);
-        }
-        if (item.originalImageUrl) {
-          await deleteImage(item.originalImageUrl);
-        }
-      }
-    } catch (cleanupError) {
-      console.error('Error cleaning up images:', cleanupError);
-      // Don't fail the request if cleanup fails
-    }
+    // No need to clean up images - they're stored as base64 in the database
+    // Images are automatically removed when documents are deleted
 
     res.status(200).json({
       success: true,
